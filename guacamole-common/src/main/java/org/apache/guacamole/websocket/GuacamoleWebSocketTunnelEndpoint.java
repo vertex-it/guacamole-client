@@ -19,30 +19,23 @@
 
 package org.apache.guacamole.websocket;
 
-import java.io.IOException;
-import java.util.List;
-import javax.websocket.CloseReason;
-import javax.websocket.CloseReason.CloseCode;
-import javax.websocket.Endpoint;
-import javax.websocket.EndpointConfig;
-import javax.websocket.MessageHandler;
-import javax.websocket.OnClose;
-import javax.websocket.OnMessage;
-import javax.websocket.OnOpen;
-import javax.websocket.RemoteEndpoint;
-import javax.websocket.Session;
+import org.apache.guacamole.GuacamoleClientException;
+import org.apache.guacamole.GuacamoleConnectionClosedException;
 import org.apache.guacamole.GuacamoleException;
 import org.apache.guacamole.io.GuacamoleReader;
 import org.apache.guacamole.io.GuacamoleWriter;
 import org.apache.guacamole.net.GuacamoleTunnel;
-import org.apache.guacamole.GuacamoleClientException;
-import org.apache.guacamole.GuacamoleConnectionClosedException;
 import org.apache.guacamole.protocol.FilteredGuacamoleWriter;
 import org.apache.guacamole.protocol.GuacamoleFilter;
 import org.apache.guacamole.protocol.GuacamoleInstruction;
 import org.apache.guacamole.protocol.GuacamoleStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import javax.websocket.*;
+import javax.websocket.CloseReason.CloseCode;
+import java.io.IOException;
+import java.util.List;
 
 /**
  * A WebSocket implementation of GuacamoleTunnel functionality, compatible with
@@ -69,7 +62,7 @@ public abstract class GuacamoleWebSocketTunnelEndpoint extends Endpoint {
     /**
      * Logger for this class.
      */
-    private final Logger logger = LoggerFactory.getLogger(GuacamoleWebSocketTunnelEndpoint.class);
+    protected final Logger logger = LoggerFactory.getLogger(GuacamoleWebSocketTunnelEndpoint.class);
 
     /**
      * The underlying GuacamoleTunnel. WebSocket reads/writes will be handled
@@ -82,7 +75,7 @@ public abstract class GuacamoleWebSocketTunnelEndpoint extends Endpoint {
      * Remote (client) side of this connection. This value will always be
      * non-null if tunnel is non-null.
      */
-    private RemoteEndpoint.Basic remote;
+    protected RemoteEndpoint.Basic remote;
 
     /**
      * Sends the numeric Guacaomle Status Code and Web Socket

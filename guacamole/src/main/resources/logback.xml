@@ -26,9 +26,16 @@
         </encoder>
     </appender>
 
+    <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+        <file>/config/logovi/log.txt</file>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
     <!-- Log at INFO level -->
-    <root level="info">
-        <appender-ref ref="GUAC-DEFAULT" />
+    <root level="TRACE">
+        <appender-ref ref="FILE" />
     </root>
 
 </configuration>

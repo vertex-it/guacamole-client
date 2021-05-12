@@ -20,17 +20,22 @@
 package org.apache.guacamole.tunnel.websocket;
 
 import com.google.inject.Provider;
-import java.util.Map;
+import org.apache.guacamole.GuacamoleException;
+import org.apache.guacamole.net.GuacamoleTunnel;
+import org.apache.guacamole.tunnel.Command;
+import org.apache.guacamole.tunnel.DatabaseHelper;
+import org.apache.guacamole.tunnel.TunnelRequest;
+import org.apache.guacamole.tunnel.TunnelRequestService;
+import org.apache.guacamole.websocket.GuacamoleWebSocketTunnelEndpoint;
+
 import javax.websocket.EndpointConfig;
 import javax.websocket.HandshakeResponse;
 import javax.websocket.Session;
 import javax.websocket.server.HandshakeRequest;
 import javax.websocket.server.ServerEndpointConfig;
-import org.apache.guacamole.GuacamoleException;
-import org.apache.guacamole.net.GuacamoleTunnel;
-import org.apache.guacamole.tunnel.TunnelRequest;
-import org.apache.guacamole.tunnel.TunnelRequestService;
-import org.apache.guacamole.websocket.GuacamoleWebSocketTunnelEndpoint;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Tunnel implementation which uses WebSocket as a tunnel backend, rather than
@@ -49,6 +54,18 @@ public class RestrictedGuacamoleWebSocketTunnelEndpoint extends GuacamoleWebSock
      * be used for processing TunnelRequests.
      */
     private static final String TUNNEL_REQUEST_SERVICE_PROPERTY = "WS_GUAC_TUNNEL_REQUEST_SERVICE";
+
+    protected String username;
+
+    protected Command command;
+
+    protected List<Command> forbiddenCommands;
+
+    protected String buffer = "";
+
+    protected Boolean isBlocked = false;
+
+    protected String inputChar;
 
     /**
      * Configurator implementation which stores the requested GuacamoleTunnel
@@ -110,8 +127,123 @@ public class RestrictedGuacamoleWebSocketTunnelEndpoint extends GuacamoleWebSock
             return null;
 
         // Create and return tunnel
-        return tunnelRequestService.createTunnel(tunnelRequest);
+        GuacamoleTunnel tunnel = tunnelRequestService.createTunnel(tunnelRequest);
 
+        username = tunnelRequestService.loggedInUsername;
+
+        // Find user_id by username
+        DatabaseHelper database = new DatabaseHelper(logger);
+        int user_id = database.getUserIdByUsername(username);
+
+        // Find all commands by forbidden command ids
+        forbiddenCommands = database.getForbiddenCommands(user_id);
+
+        return tunnel;
+    }
+
+    @Override
+    public void onMessage(String message) {
+
+        // Guacamole command blocking algorithm
+        // Work only with key instructions
+        if (message.contains("key")) {
+
+            // Convert and parse message string to
+            // get decimal value of instruction
+            List<String> instructionList = Arrays.asList(message.split(","));
+            List<String> decimalList = Arrays.asList(instructionList.get(1).split("\\."));
+            int decimal = Integer.parseInt(decimalList.get(1));
+
+            inputChar = getInputChar(decimal);
+
+            // Work only with pressed keys
+            // Algorithm implementation
+            if (instructionList.get(2).equals("1.1;")) {
+                if (isBlocked) {
+                    // ONLY ALLOW BACKSPACE
+                    assert command != null;
+                    if (command.action.equals("ONLY_BACKSPACE") && inputChar.equals("BACKSPACE")) {
+                        updateBuffer();
+                        unBlock();
+                    }
+                } else {
+                    if (updateBuffer()) {
+                        logger.info("Buffer is trimmed!");
+                        buffer = buffer.substring(0, buffer.length() - 1);
+                    }
+                }
+
+                logger.info("Buffer: " + buffer);
+
+                if (! isBlocked) {
+                    super.onMessage(message);
+                }
+            } else {
+                super.onMessage(message);
+            }
+        } else {
+            super.onMessage(message);
+        }
+    }
+
+    protected boolean updateBuffer() {
+        if (inputChar.equals("BACKSPACE")) {
+            //logger.info("inputChar.equals(\"BACKSPACE\")");
+            if (buffer.length() > 0) {
+                buffer = buffer.substring(0, buffer.length() - 1);
+            }
+        } else {
+            //logger.info("inputChar.equals(\"BACKSPACE\") else");
+            buffer += inputChar;
+        }
+
+        for (Command forbiddenCommand : forbiddenCommands) {
+            if (buffer.length() >= forbiddenCommand.name.length()) {
+                String bufferTrimmed = buffer.substring(buffer.length() - forbiddenCommand.name.length());
+
+                if (bufferTrimmed.equals(forbiddenCommand.name)) {
+                    command = forbiddenCommand;
+                    block();
+                    if (command.action.equals("ONLY_BACKSPACE")) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    protected void block() {
+        logger.info("Action: " + command.action);
+
+        if (command.action.equals("LOG")) {
+            logger.info("User " + username + " tried to execute the following command: " + command.name);
+            unBlock();
+        } else if (command.action.equals("STOP_SESSION")) {
+            logger.info("Session will be stopped because forbidden command is typed!");
+            System.exit(1);
+        } else {
+            isBlocked = true;
+            logger.info("isBlocked = true");
+        }
+    }
+
+    protected void unBlock() {
+        isBlocked = false;
+        logger.info("isBlocked = false");
+    }
+
+    private String getInputChar(int decimal) {
+        if (decimal == 65288) {
+            return "BACKSPACE";
+        }
+
+        if (decimal >= 32 && decimal <= 126) {
+            return (char) decimal + "";
+        }
+
+        return "";
     }
 
 }
